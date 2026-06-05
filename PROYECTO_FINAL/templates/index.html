@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="refresh" content="5" />
+  <title>Monitor de Humedad — ESP32</title>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg:        #0a0e17;
+      --surface:   #111827;
+      --border:    #1e2d40;
+      --accent:    #00d4ff;
+      --accent2:   #7c3aed;
+      --green:     #10b981;
+      --orange:    #f59e0b;
+      --red:       #ef4444;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --mono:      'Share Tech Mono', monospace;
+      --sans:      'Rajdhani', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100vh;
+      padding: 0 0 60px;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 2px solid var(--accent);
+      padding: 18px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    .badge {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      padding: 4px 12px;
+      border-radius: 2px;
+      background: var(--border);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      animation: blink 2s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.5} }
+
+    .container { max-width: 1100px; margin: 0 auto; padding: 24px 24px 0; }
+
+    /* ── Info bar ── */
+    .info-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .info-item {
+      background: var(--surface);
+      padding: 12px 18px;
+    }
+    .info-item .label {
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .info-item .value {
+      font-family: var(--mono);
+      font-size: 0.95rem;
+      color: var(--accent);
+    }
+
+    /* ── Estado central ── */
+    .estado-box {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      padding: 20px 28px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+    .estado-label {
+      font-size: 0.7rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .estado-valor {
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+    .estado-NORMAL    { color: var(--green); }
+    .estado-SECO      { color: var(--orange); }
+    .estado-MUY.HÚMEDO { color: var(--accent); }
+    .estado-sin-datos { color: var(--muted); }
+
+    .dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-verde   { background: var(--green);  box-shadow: 0 0 12px var(--green); }
+    .dot-naranja { background: var(--orange); box-shadow: 0 0 12px var(--orange); }
+    .dot-azul    { background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+    .dot-gris    { background: var(--muted); }
+
+    /* ── Grid de métricas ── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .metric {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+    .metric::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: var(--accent);
+    }
+    .metric .m-label {
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .metric .m-value {
+      font-family: var(--mono);
+      font-size: 1.6rem;
+      font-weight: 400;
+      color: var(--text);
+    }
+    .metric .m-unit {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+
+    /* ── Gráficas ── */
+    .graficas { margin-bottom: 24px; }
+    .graficas h2 {
+      font-size: 0.75rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .grid-graficas {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+    .grafica-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .grafica-card .g-titulo {
+      padding: 10px 16px;
+      font-size: 0.7rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      background: rgba(0,212,255,0.04);
+    }
+    .grafica-card img {
+      width: 100%;
+      display: block;
+      background: #0d1117;
+    }
+
+    /* ── ThingSpeak ── */
+    .ts-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent2);
+      border-radius: 6px;
+      padding: 14px 20px;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: var(--muted);
+      margin-bottom: 24px;
+      word-break: break-all;
+    }
+    .ts-box .ts-label {
+      font-size: 0.65rem;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--accent2);
+      margin-bottom: 6px;
+    }
+
+    /* ── Sin datos ── */
+    .sin-datos {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--muted);
+    }
+    .sin-datos .icono { font-size: 3rem; margin-bottom: 16px; }
+    .sin-datos h2 { font-size: 1.4rem; font-weight: 600; margin-bottom: 8px; }
+    .sin-datos p  { font-family: var(--mono); font-size: 0.85rem; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 20px;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+      margin-top: 32px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⬡ Monitor de Humedad — ESP32</h1>
+  <span class="badge">AUTO-REFRESH 5s</span>
+</header>
+
+<div class="container">
+
+  <!-- Info del sistema -->
+  <div class="info-bar">
+    <div class="info-item">
+      <div class="label">Proyecto</div>
+      <div class="value">Programación Aplicada 2025-3</div>
+    </div>
+    <div class="info-item">
+      <div class="label">Sensor</div>
+      <div class="value">Capacitivo Humedad GPIO34</div>
+    </div>
+    <div class="info-item">
+      <div class="label">Protocolo</div>
+      <div class="value">UART 115200 bps</div>
+    </div>
+    <div class="info-item">
+      <div class="label">Formato</div>
+      <div class="value">tiempo_ms, adc, voltaje</div>
+    </div>
+  </div>
+
+  {% if stats %}
+
+  <!-- Estado actual -->
+  <div class="estado-box">
+    {% if stats.estado == "NORMAL" %}
+      <div class="dot dot-verde"></div>
+    {% elif stats.estado == "SECO" %}
+      <div class="dot dot-naranja"></div>
+    {% else %}
+      <div class="dot dot-azul"></div>
+    {% endif %}
+    <div>
+      <div class="estado-label">Estado del suelo</div>
+      <div class="estado-valor estado-{{ stats.estado }}">{{ stats.estado }}</div>
+    </div>
+    <div style="margin-left:auto; text-align:right;">
+      <div class="estado-label">Humedad actual</div>
+      <div style="font-family:var(--mono); font-size:2.5rem; color:var(--accent);">
+        {{ stats.ultimo_humedad }}<span style="font-size:1rem; color:var(--muted)"> %</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Métricas -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="m-label">Último ADC</div>
+      <div class="m-value">{{ stats.ultimo_adc }}<span class="m-unit">raw</span></div>
+    </div>
+    <div class="metric">
+      <div class="m-label">Último voltaje</div>
+      <div class="m-value">{{ stats.ultimo_voltaje }}<span class="m-unit">V</span></div>
+    </div>
+    <div class="metric">
+      <div class="m-label">Muestras</div>
+      <div class="m-value">{{ stats.num_muestras }}</div>
+    </div>
+    <div class="metric">
+      <div class="m-label">Promedio</div>
+      <div class="m-value">{{ stats.promedio }}<span class="m-unit">V</span></div>
+    </div>
+    <div class="metric">
+      <div class="m-label">Mínimo</div>
+      <div class="m-value">{{ stats.minimo }}<span class="m-unit">V</span></div>
+    </div>
+    <div class="metric">
+      <div class="m-label">Máximo</div>
+      <div class="m-value">{{ stats.maximo }}<span class="m-unit">V</span></div>
+    </div>
+    <div class="metric">
+      <div class="m-label">Desv. estándar</div>
+      <div class="m-value">{{ stats.desviacion_std }}<span class="m-unit">V</span></div>
+    </div>
+    <div class="metric">
+      <div class="m-label">Promedio móvil</div>
+      <div class="m-value">{{ stats.promedio_movil }}<span class="m-unit">V</span></div>
+    </div>
+  </div>
+
+  <!-- Gráficas -->
+  <div class="graficas">
+    <h2>▸ Visualizaciones</h2>
+    <div class="grid-graficas">
+      <div class="grafica-card">
+        <div class="g-titulo">Señal en el tiempo</div>
+        <img src="/static/plots/sensor_tiempo.png" alt="Señal en el tiempo" />
+      </div>
+      <div class="grafica-card">
+        <div class="g-titulo">Histograma de voltajes</div>
+        <img src="/static/plots/histograma.png" alt="Histograma" />
+      </div>
+      <div class="grafica-card">
+        <div class="g-titulo">Promedio móvil</div>
+        <img src="/static/plots/promedio_movil.png" alt="Promedio móvil" />
+      </div>
+      <div class="grafica-card">
+        <div class="g-titulo">Porcentaje de humedad</div>
+        <img src="/static/plots/humedad_pct.png" alt="Humedad %" />
+      </div>
+    </div>
+  </div>
+
+  <!-- ThingSpeak -->
+  <div class="ts-box">
+    <div class="ts-label">▸ ThingSpeak IoT</div>
+    {{ estado_ts }}
+  </div>
+
+  {% else %}
+
+  <!-- Sin datos -->
+  <div class="sin-datos">
+    <div class="icono">📡</div>
+    <h2>Esperando datos del ESP32</h2>
+    <p>Verifica la conexión USB y el puerto en config.py</p>
+    <p style="margin-top:12px; color:var(--border)">Puerto: {{ config_puerto if config_puerto else 'COM4' }}</p>
+  </div>
+
+  {% endif %}
+
+</div>
+
+<footer>
+  Sistema de Monitoreo Analógico &nbsp;|&nbsp;
+  Sensor Capacitivo de Humedad &nbsp;|&nbsp;
+  ESP32 + Python 3 + Flask &nbsp;|&nbsp;
+  Programación Aplicada 2025-3
+</footer>
+
+</body>
+</html>
